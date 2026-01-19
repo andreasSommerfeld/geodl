@@ -227,4 +227,4 @@ fitted <- myCNN |>
                                 cuda_index = torch::cuda_current_device()),
       verbose=TRUE)
 
-luz_save(fitted, paste0(outpath, "/cnnModel.pt"))
+luz_save(fitted, paste0(outpath, "cnnModel.pt"))
