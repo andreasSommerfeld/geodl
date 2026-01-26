@@ -14,15 +14,25 @@ library(luz)
 library(yardstick)
 library(micer)
 library(gt)
+library(sf)
 
 
 # set up torch via locally downloaded binaries ----------------------------
 
-Sys.setenv(TORCH_URL= "C:/temp/libtorch-win-shared-with-deps-2.7.1+cpu.zip")
-Sys.setenv(LANTERN_URL="C:/temp/lantern-0.16.3+cpu-win64.zip")
+Sys.setenv(TORCH_URL= "C:/temp/libtorch-win-shared-with-deps-2.7.1+cpu.zip") # download package binaries by hand and set the path to the downloaded zip files
+Sys.setenv(LANTERN_URL="C:/temp/lantern-0.16.3+cpu-win64.zip") # download package binaries by hand and set the path to the downloaded zip files
 
-torch::install_torch()
+torch::install_torch() # needs TORCH_URL && LANTERN_URL set as local paths
 
+# test gpu availibility ---------------------------------------------------
+
+cuda_is_available()
+
+
+# test load own training data ---------------------------------------------
+
+lc_vec <- sf::st_read("E:/_Fernerkundungsprojekte/029_deepLearning_test/geodl/geodl_support/land_cover_type.shp")
+lc_luftbild <- rast("E:/_Fernerkundungsprojekte/029_deepLearning_test/geodl/geodl_support/test_clip_raster_4band.tif")
 
 # test skript  ------------------------------------------------------------
 
@@ -34,6 +44,12 @@ fldPth <- "E:/_Fernerkundungsprojekte/029_deepLearning_test/geodl/cnn_test_data/
 trainDF <- read_csv(str_glue("{fldPth}train.csv"))
 valDF <- read_csv(str_glue("{fldPth}validation.csv"))
 testDF <- read_csv(str_glue("{fldPth}test.csv"))
+
+### test own data
+
+
+
+##
 
 eurosatDataSet <- torch::dataset(
 
@@ -228,3 +244,88 @@ fitted <- myCNN |>
       verbose=TRUE)
 
 luz_save(fitted, paste0(outpath, "cnnModel.pt"))
+
+
+# validate model ----------------------------------------------------------
+
+cnnModel <- luz_load( paste0(outpath, "cnnModel.pt") )
+logs <- read_csv("E:/_Fernerkundungsprojekte/029_deepLearning_test/geodl/cnn_test_data/outpath/cnnLogs.csv")
+
+logs |>
+  ggplot(aes(x=epoch,
+             y=loss,
+             color=set))+
+  geom_line() +
+  theme_bw()
+
+logs |>
+  ggplot(aes(x=epoch,
+             y=acc,
+             color=set))+
+  geom_line() +
+  theme_bw()
+
+
+# validate on test data ---------------------------------------------------
+
+predTest <- predict(cnnModel, testDL)$detach()$to(device="cpu")
+predTest <- predTest |>
+  torch_argmax(dim=2) |>
+  as.array(predTest)
+
+truth <- testDF$Label + 1
+
+truth <- as.factor(truth) |>
+  fct_recode("AnnualCrop" = "1",
+             "Forest" = "2",
+             "HerbaceousVegetation" = "3",
+             "Highway" = "4",
+             "Industrial" = "5",
+             "Pasture" = "6",
+             "PermanentCrop" = "7",
+             "Residential" = "8",
+             "River" = "9",
+             "SeaLake" = "10")
+
+predTest <- as.factor(predTest) |>
+  fct_recode("AnnualCrop" = "1",
+             "Forest" = "2",
+             "HerbaceousVegetation" = "3",
+             "Highway" = "4",
+             "Industrial" = "5",
+             "Pasture" = "6",
+             "PermanentCrop" = "7",
+             "Residential" = "8",
+             "River" = "9",
+             "SeaLake" = "10")
+
+resultsDF <- data.frame(truth=truth,
+                        pred=predTest)
+
+accuracy(resultsDF,
+         truth=truth,
+         estimate=pred)$.estimate
+
+recall(resultsDF,
+       truth=truth,
+       estimate=pred,
+       estimator="macro")$.estimate
+
+precision(resultsDF,
+          truth=truth,
+          estimate=pred,
+          estimator="macro")$.estimate
+
+f_meas(resultsDF,
+       truth=truth,
+       estimate=pred,
+       estimator="macro")$.estimate
+
+conf_mat(resultsDF,
+         truth=truth,
+         estimate=pred)
+
+mice(resultsDF$truth,
+     resultsDF$pred,
+     mappings=levels(as.factor(resultsDF$truth)),
+     multiclass = TRUE)
