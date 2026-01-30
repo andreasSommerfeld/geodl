@@ -40,10 +40,9 @@ files <- list.files(image_folder,
 ext <- st_read("E:/_Fernerkundungsprojekte/029_deepLearning_test/geodl/forest_class/indata/extent/tree_spec_stand_vec.shp") %>%
   mutate(id_img = seq(0,72,1))
 
+# loop to create masks for input images
 
-output <- vector("list", length(files))  # 1. output
-
-for (i in seq_along(output)) {            # 2. sequence
+for (i in seq_along(output)) {
 
 print(i)
 
@@ -68,7 +67,32 @@ makeMasks(image = paste0(image_folder, file_name),
 }
 
 
-output
+dir.create(paste0(image_folder, "chips"))
+
+for (i in seq_along(output)) {
+
+  print(i)
+
+  file_name <- files[i]
+
+  image_id <- as.numeric(strsplit( (strsplit(file_name, "[_]")[[1]][5]), "[.]" )[[1]][1])
+
+  ext_loop <- ext %>%         # choose extent
+    filter(id_img == image_id)
+
+  plot(st_geometry(ext_loop)) # plot extent
+
+  makeChipsMultiClass(image = image_folder,
+                      mask =  paste0(image_folder, "masks"),
+                      n_channels = 4,
+                      size = 512,
+                      stride_x = 512,
+                      stride_y = 512,
+                      outDir = paste0(image_folder, "chips"),
+                      useExistingDir=FALSE)
+
+}
+
 
 
 
